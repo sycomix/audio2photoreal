@@ -30,8 +30,7 @@ warnings.filterwarnings("ignore")
 
 def cycle(iterable):
     while True:
-        for x in iterable:
-            yield x
+        yield from iterable
 
 
 def get_logger(out_dir: str):
@@ -82,8 +81,7 @@ class ModelTrainer:
         loss = sum_flat(loss * mask.float())
         n_entries = a.shape[1] * a.shape[2]
         non_zero_elements = sum_flat(mask) * n_entries
-        mse_loss_val = loss / non_zero_elements
-        return mse_loss_val
+        return loss / non_zero_elements
 
     def _l2_loss(self, motion_pred, motion_gt, mask=None):
         if mask is not None:
@@ -138,9 +136,7 @@ class ModelTrainer:
         gt_motion = gt_motion[:, ::skip_step, :]
         pred_motion, loss_commit, perplexity = self.net(gt_motion, mask=None)
         loss_motion = self._l2_loss(pred_motion, gt_motion).mean()
-        loss_vel = 0.0
-        if self.loss_vel > 0:
-            loss_vel = self._vel_loss(pred_motion, gt_motion)
+        loss_vel = self._vel_loss(pred_motion, gt_motion) if self.loss_vel > 0 else 0.0
         loss = loss_motion + self.commit * loss_commit + self.loss_vel * loss_vel
         self.optimizer.zero_grad()
         loss.backward()
@@ -170,8 +166,8 @@ class ModelTrainer:
         for j in range(len(path.split("/")) - 1):
             if not os.path.exists("/".join(path.split("/")[: j + 1])):
                 os.system("mkdir " + "/".join(path.split("/")[: j + 1]))
-        np.save(os.path.join(self.out_dir, curr_name + "_gt.npy"), unstd_pose)
-        np.save(os.path.join(self.out_dir, curr_name + "_pred.npy"), unstd_pred)
+        np.save(os.path.join(self.out_dir, f"{curr_name}_gt.npy"), unstd_pose)
+        np.save(os.path.join(self.out_dir, f"{curr_name}_pred.npy"), unstd_pred)
 
     def _log_losses(
         self,
@@ -200,7 +196,7 @@ class ModelTrainer:
             self.logger.info(msg)
             self.best_perplexity = avg_perplexity
             if save:
-                print(f"saving checkpoint net_best.pth")
+                print("saving checkpoint net_best.pth")
                 self.save_model(os.path.join(self.out_dir, "net_best.pth"))
 
         if avg_commit < self.best_commit:
@@ -262,13 +258,11 @@ class ModelTrainer:
             commit_loss, recons_loss, total_perplexity, nb_iter, nb_sample, draw, save
         )
         if save:
-            print(f"saving checkpoint net_last.pth")
+            print("saving checkpoint net_last.pth")
             self.save_model(os.path.join(self.out_dir, "net_last.pth"))
             if nb_iter % 100000 == 0:
-                print(f"saving checkpoint net_iter_x.pth")
-                self.save_model(
-                    os.path.join(self.out_dir, "net_iter" + str(nb_iter) + ".pth")
-                )
+                print("saving checkpoint net_iter_x.pth")
+                self.save_model(os.path.join(self.out_dir, f"net_iter{nb_iter}.pth"))
 
 
 def _load_data_info(args, logger):
@@ -293,7 +287,7 @@ def _load_checkpoint(args, net, logger):
     with open(f"{cp_dir}/args.json") as f:
         trans_args = json.load(f)
     assert trans_args["data_root"] == args.data_root, "data_root doesnt match"
-    logger.info("loading checkpoint from {}".format(args.resume_pth))
+    logger.info(f"loading checkpoint from {args.resume_pth}")
     ckpt = torch.load(args.resume_pth, map_location="cpu")
     net.load_state_dict(ckpt["net"], strict=True)
     return net

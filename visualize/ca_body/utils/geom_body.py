@@ -277,7 +277,7 @@ def interpolate_values_mesh(
 ) -> th.Tensor:
     """Interpolate values on the mesh."""
     assert src_faces.dtype == th.long, "index should be torch.long"
-    assert len(src_values.shape) in [2, 3], "supporting [N, F] and [B, N, F] only"
+    assert len(src_values.shape) in {2, 3}, "supporting [N, F] and [B, N, F] only"
 
     if src_values.shape == 2:
         return (src_values[src_faces[idxs]] * weights[..., np.newaxis]).sum(dim=1)
@@ -540,14 +540,13 @@ def invRodrigues(R: th.Tensor, eps: float = 1e-8) -> th.Tensor:
     norm = th.norm(v, dim=-1, keepdim=True).to(v.dtype).clamp(min=eps)
     pi_vnorm = np.pi * (v / norm)
 
-    # use taylor expansion when R is close to a identity matrix (trace(R) ~= 3)
-    r = th.where(
+    return th.where(
         t[:, None] > (3 - 1e-3),
         inv_sinc_taylor_expansion[..., None] * omega,
-        th.where(t[:, None] < -1 + 1e-3, pi_vnorm, inv_sinc[..., None] * omega),
+        th.where(
+            t[:, None] < -1 + 1e-3, pi_vnorm, inv_sinc[..., None] * omega
+        ),
     )
-
-    return r
 
 
 def EulerXYZ_to_matrix(xyz: th.Tensor) -> th.Tensor:
@@ -589,8 +588,7 @@ def EulerXYZ_to_matrix(xyz: th.Tensor) -> th.Tensor:
     )  # [..., 3]
     r2 = th.cross(r3, r1, dim=-1)
 
-    R = th.cat((r1.unsqueeze(-2), r2.unsqueeze(-2), r3.unsqueeze(-2)), -2)
-    return R
+    return th.cat((r1.unsqueeze(-2), r2.unsqueeze(-2), r3.unsqueeze(-2)), -2)
 
 
 def axisangle_to_matrix(rvec: th.Tensor) -> th.Tensor:

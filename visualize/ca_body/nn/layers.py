@@ -156,6 +156,8 @@ def weight_norm_wrapper(
         values for most of the WN layers are None to preserve the existing behavior.
     """
 
+
+
     class Wrap(cls):
         def __init__(self, *args: Any, name=name, g_dim=g_dim, v_dim=v_dim, **kwargs: Any):
             # Check if the extra arguments are overwriting arguments for the wrapped class
@@ -175,8 +177,8 @@ def weight_norm_wrapper(
             # For backward compatibility.
             self._register_load_state_dict_pre_hook(
                 TensorMappingHook(
-                    [(name, name + "_v"), ("g", name + "_g")],
-                    {name + "_g": getattr(self, name + "_g").shape},
+                    [(name, f"{name}_v"), ("g", f"{name}_g")],
+                    {f"{name}_g": getattr(self, f"{name}_g").shape},
                 )
             )
 
@@ -226,6 +228,7 @@ def weight_norm_wrapper(
                 setattr(self, self.weight_norm_args["name"], None)
             return result
 
+
     # Allows for pickling of the wrapper: https://bugs.python.org/issue13520
     Wrap.__qualname__ = new_cls_name
 
@@ -234,10 +237,10 @@ def weight_norm_wrapper(
 
 # pyre-fixme[2]: Parameter must be annotated.
 def is_weight_norm_wrapped(module) -> bool:
-    for hook in module._forward_pre_hooks.values():
-        if isinstance(hook, WeightNorm):
-            return True
-    return False
+    return any(
+        isinstance(hook, WeightNorm)
+        for hook in module._forward_pre_hooks.values()
+    )
 
 
 class Conv2dUB(th.nn.Conv2d):
@@ -367,53 +370,42 @@ class ConvTranspose2dUB(th.nn.ConvTranspose2d):
     ) -> List[int]:
         if output_size is None:
             # converting to list if was not already
-            ret = th.nn.modules.utils._single(self.output_padding)
-        else:
-            has_batch_dim = input.dim() == num_spatial_dims + 2
-            num_non_spatial_dims = 2 if has_batch_dim else 1
-            if len(output_size) == num_non_spatial_dims + num_spatial_dims:
-                output_size = output_size[num_non_spatial_dims:]
-            if len(output_size) != num_spatial_dims:
+            return th.nn.modules.utils._single(self.output_padding)
+        has_batch_dim = input.dim() == num_spatial_dims + 2
+        num_non_spatial_dims = 2 if has_batch_dim else 1
+        if len(output_size) == num_non_spatial_dims + num_spatial_dims:
+            output_size = output_size[num_non_spatial_dims:]
+        if len(output_size) != num_spatial_dims:
+            raise ValueError(
+                f"ConvTranspose{num_spatial_dims}D: for {input.dim()}D input, output_size must have {num_spatial_dims} or {num_non_spatial_dims + num_spatial_dims} elements (got {len(output_size)})"
+            )
+
+        min_sizes = th.jit.annotate(List[int], [])
+        max_sizes = th.jit.annotate(List[int], [])
+        for d in range(num_spatial_dims):
+            dim_size = (
+                (input.size(d + num_non_spatial_dims) - 1) * stride[d]
+                - 2 * padding[d]
+                + (dilation[d] if dilation is not None else 1) * (kernel_size[d] - 1)
+                + 1
+            )
+            min_sizes.append(dim_size)
+            max_sizes.append(min_sizes[d] + stride[d] - 1)
+
+        for i in range(len(output_size)):
+            size = output_size[i]
+            min_size = min_sizes[i]
+            max_size = max_sizes[i]
+            if size < min_size or size > max_size:
                 raise ValueError(
-                    "ConvTranspose{}D: for {}D input, output_size must have {} or {} elements (got {})".format(
-                        num_spatial_dims,
-                        input.dim(),
-                        num_spatial_dims,
-                        num_non_spatial_dims + num_spatial_dims,
-                        len(output_size),
-                    )
+                    f"requested an output size of {output_size}, but valid sizes range from {min_sizes} to {max_sizes} (for an input of {input.size()[2:]})"
                 )
 
-            min_sizes = th.jit.annotate(List[int], [])
-            max_sizes = th.jit.annotate(List[int], [])
-            for d in range(num_spatial_dims):
-                dim_size = (
-                    (input.size(d + num_non_spatial_dims) - 1) * stride[d]
-                    - 2 * padding[d]
-                    + (dilation[d] if dilation is not None else 1) * (kernel_size[d] - 1)
-                    + 1
-                )
-                min_sizes.append(dim_size)
-                max_sizes.append(min_sizes[d] + stride[d] - 1)
+        res = th.jit.annotate(List[int], [])
+        for d in range(num_spatial_dims):
+            res.append(output_size[d] - min_sizes[d])
 
-            for i in range(len(output_size)):
-                size = output_size[i]
-                min_size = min_sizes[i]
-                max_size = max_sizes[i]
-                if size < min_size or size > max_size:
-                    raise ValueError(
-                        (
-                            "requested an output size of {}, but valid sizes range "
-                            "from {} to {} (for an input of {})"
-                        ).format(output_size, min_sizes, max_sizes, input.size()[2:])
-                    )
-
-            res = th.jit.annotate(List[int], [])
-            for d in range(num_spatial_dims):
-                res.append(output_size[d] - min_sizes[d])
-
-            ret = res
-        return ret
+        return res
 
 
 # Set default g_dim=0 (Conv2d) or 1 (ConvTranspose2d) and v_dim=None to preserve
@@ -597,10 +589,7 @@ def glorot(m: th.nn.Module, alpha: float = 1.0) -> None:
 
 
 def make_tuple(x: Union[int, Tuple[int, int]], n: int) -> Tuple[int, int]:
-    if isinstance(x, int):
-        return tuple([x for _ in range(n)])
-    else:
-        return x
+    return tuple(x for _ in range(n)) if isinstance(x, int) else x
 
 
 class LinearELR(th.nn.Module):
@@ -621,10 +610,7 @@ class LinearELR(th.nn.Module):
         else:
             self.register_parameter("bias", None)
         self.std: float = 0.0
-        if gain is None:
-            self.gain: float = np.sqrt(2.0)
-        else:
-            self.gain: float = gain
+        self.gain: float = np.sqrt(2.0) if gain is None else gain
         self.lr_mul = lr_mul
         if bias_lr_mul is None:
             bias_lr_mul = lr_mul
@@ -680,10 +666,7 @@ class Conv2dELR(th.nn.Module):
         self.output_padding: Tuple[int, int] = make_tuple(output_padding, 2)
         self.dilation: Tuple[int, int] = make_tuple(dilation, 2)
         self.groups = groups
-        if gain is None:
-            self.gain: float = np.sqrt(2.0)
-        else:
-            self.gain: float = gain
+        self.gain: float = np.sqrt(2.0) if gain is None else gain
         self.lr_mul = lr_mul
         if bias_lr_mul is None:
             bias_lr_mul = lr_mul
@@ -723,8 +706,8 @@ class Conv2dELR(th.nn.Module):
                 self.bias.zero_()
 
     def forward(self, x: th.Tensor) -> th.Tensor:
+        w = self.weight
         if self.transpose:
-            w = self.weight
             if self.fuse_box_filter:
                 w = thf.pad(w, (1, 1, 1, 1), mode="constant")
                 w = w[:, :, 1:, 1:] + w[:, :, :-1, 1:] + w[:, :, 1:, :-1] + w[:, :, :-1, :-1]
@@ -741,11 +724,7 @@ class Conv2dELR(th.nn.Module):
                 dilation=self.dilation,
                 groups=self.groups,
             )
-            if self.untied and bias is not None:
-                out = out + bias[None, ...]
-            return out
         else:
-            w = self.weight
             if self.fuse_box_filter:
                 w = thf.pad(w, (1, 1, 1, 1), mode="constant")
                 w = (
@@ -763,9 +742,10 @@ class Conv2dELR(th.nn.Module):
                 dilation=self.dilation,
                 groups=self.groups,
             )
-            if self.untied and bias is not None:
-                out = out + bias[None, ...]
-            return out
+
+        if self.untied and bias is not None:
+            out = out + bias[None, ...]
+        return out
 
 
 class ConcatPyramid(th.nn.Module):
@@ -818,12 +798,7 @@ class ConcatPyramid(th.nn.Module):
         # pyre-fixme[4]: Attribute must be annotated.
         self.kstd = kstd
         self.transposed = transposed
-        if every_other:
-            # pyre-fixme[4]: Attribute must be annotated.
-            self.levels = int(np.ceil(len(branch) / 2))
-        else:
-            self.levels = len(branch)
-
+        self.levels = int(np.ceil(len(branch) / 2)) if every_other else len(branch)
         kernel = th.from_numpy(gaussian_kernel(ksize, kstd)).float()
         self.register_buffer("blur_kernel", kernel[None, None].expand(n_concat_in, -1, -1, -1))
 
@@ -865,7 +840,7 @@ def get_pad_layer(pad_type):
     elif pad_type == "zero":
         PadLayer = th.nn.ZeroPad2d
     else:
-        print("Pad type [%s] not recognized" % pad_type)
+        print(f"Pad type [{pad_type}] not recognized")
     # pyre-fixme[61]: `PadLayer` is undefined, or not always defined.
     return PadLayer
 
@@ -923,12 +898,11 @@ class Downsample(th.nn.Module):
     # pyre-fixme[3]: Return type must be annotated.
     # pyre-fixme[2]: Parameter must be annotated.
     def forward(self, inp):
-        if self.filt_size == 1:
-            if self.pad_off == 0:
-                return inp[:, :, :: self.stride, :: self.stride]
-            else:
-                return self.pad(inp)[:, :, :: self.stride, :: self.stride]
-        else:
+        if self.filt_size != 1:
             return th.nn.functional.conv2d(
                 self.pad(inp), self.filt, stride=self.stride, groups=inp.shape[1]
             )
+        if self.pad_off == 0:
+            return inp[:, :, :: self.stride, :: self.stride]
+        else:
+            return self.pad(inp)[:, :, :: self.stride, :: self.stride]

@@ -343,7 +343,7 @@ def main(args):
                     msg += f"train_{k} at {step}: {v / count:.4f} | "
                     train_metrics = {}
                 count = 0
-                writer.add_scalar(f"train_lr", trainer.scheduler.get_lr()[0], step)
+                writer.add_scalar("train_lr", trainer.scheduler.get_lr()[0], step)
                 if step < args.warm_up_iter:
                     msg += f"lr: {current_lr} | "
                 print(msg)

@@ -89,5 +89,4 @@ def train_args():
     parser.add_argument(
         "--seed", default=123, type=int, help="seed for initializing training."
     )
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()

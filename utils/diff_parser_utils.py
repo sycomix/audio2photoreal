@@ -33,7 +33,7 @@ def parse_and_load_from_model(parser):
 
     for a in args_to_overwrite:
         if a in model_args.keys():
-            if a == "timestep_respacing" or a == "partial":
+            if a in ["timestep_respacing", "partial"]:
                 continue
             setattr(args, a, model_args[a])
 
@@ -43,9 +43,7 @@ def parse_and_load_from_model(parser):
 
         else:
             print(
-                "Warning: was not able to load [{}], using default value [{}] instead.".format(
-                    a, args.__dict__[a]
-                )
+                f"Warning: was not able to load [{a}], using default value [{args.__dict__[a]}] instead."
             )
 
     if args.cond_mask_prob == 0:
@@ -303,5 +301,4 @@ def generate_args():
     add_base_options(parser)
     add_sampling_options(parser)
     add_generate_options(parser)
-    args = parse_and_load_from_model(parser)
-    return args
+    return parse_and_load_from_model(parser)

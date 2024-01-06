@@ -134,7 +134,7 @@ class GuideTransformer(nn.Module):
         )  # Lower triangular matrix
         mask = mask.float()
         mask = mask.masked_fill(mask == 0, float("-inf"))  # Convert zeros to -inf
-        mask = mask.masked_fill(mask == 1, float(0.0))  # Convert ones to 0
+        mask = mask.masked_fill(mask == 1, 0.0)
         return mask
 
     def forward(
@@ -187,7 +187,7 @@ class GuideTransformer(nn.Module):
         :param temperature: temerature of the softmax for sampling from the output logits
         :return n_sequences x sequence_length LongTensor containing generated tokens
         """
-        assert max_key_len == int(max_seq_len / 30), "currently only running for 1fps"
+        assert max_key_len == max_seq_len // 30, "currently only running for 1fps"
         max_key_len *= layers
         with th.no_grad():
             input_tokens = (

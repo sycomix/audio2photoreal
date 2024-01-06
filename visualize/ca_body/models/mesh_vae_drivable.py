@@ -63,10 +63,11 @@ class CameraPixelBias(nn.Module):
         self.register_parameter("bias", nn.Parameter(bias))
 
     def forward(self, idxs: th.Tensor):
-        bias_up = F.interpolate(
-            self.bias[idxs], size=(self.image_height, self.image_width), mode='bilinear'
+        return F.interpolate(
+            self.bias[idxs],
+            size=(self.image_height, self.image_width),
+            mode='bilinear',
         )
-        return bias_up
 
 
 class AutoEncoder(nn.Module):
@@ -266,12 +267,11 @@ class AutoEncoder(nn.Module):
             face_dec_preds = self.decoder_face(face_embs_hqlp)
         enc_face_preds = self.encoder_face(**face_dec_preds)
 
-        preds = {
+        return {
             **enc_preds,
             **enc_face_preds,
             'face_dec_preds': face_dec_preds,
         }
-        return preds
 
     def forward(
         self,
@@ -623,15 +623,13 @@ class ConvDecoder(nn.Module):
         verts_delta_rec = self.geo_fn.from_uv(verts_uv_delta_rec)
         tex_mean_rec = self.tex_conv(tex_features)
 
-        preds = {
+        return {
             'geom_delta_rec': verts_delta_rec,
             'geom_uv_delta_rec': verts_uv_delta_rec,
             'tex_mean_rec': tex_mean_rec,
             'embs_conv': embs_conv,
             'pose_conv': pose_conv,
         }
-
-        return preds
 
 
 class FaceEncoder(nn.Module):

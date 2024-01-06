@@ -43,10 +43,7 @@ def make_uv_face_index(
         uv_shape = (uv_shape, uv_shape)
 
     if device is not None:
-        if isinstance(device, str):
-            dev = th.device(device)
-        else:
-            dev = device
+        dev = th.device(device) if isinstance(device, str) else device
         assert dev.type == "cuda"
     else:
         dev = th.device("cuda")
@@ -425,7 +422,7 @@ def compute_neighbours(n_verts, vi, n_max_values=10):
     adj = {i: set() for i in range(n_verts)}
     for i in range(n_vi):
         for idx in vi[i]:
-            adj[idx] |= set(vi[i]) - set([idx])
+            adj[idx] |= set(vi[i]) - {idx}
 
     nbs_idxs = np.tile(np.arange(n_verts)[:, np.newaxis], (1, n_max_values))
     nbs_weights = np.zeros((n_verts, n_max_values), dtype=np.float32)

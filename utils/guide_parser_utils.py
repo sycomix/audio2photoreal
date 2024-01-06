@@ -52,5 +52,4 @@ def train_args():
     _add_model_args(parser)
     _add_opt_args(parser)
     _add_dataset_args(parser)
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
