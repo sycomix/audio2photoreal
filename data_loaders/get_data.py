@@ -32,16 +32,15 @@ def get_dataset_loader(
         chunk=chunk,
         add_padding=add_padding,
     )
-    loader = DataLoader(
+    return DataLoader(
         dataset,
         batch_size=args.batch_size,
-        shuffle=not split == "test",
+        shuffle=split != "test",
         num_workers=8,
         drop_last=True,
         collate_fn=social_collate,
         pin_memory=True,
     )
-    return loader
 
 
 def _load_pose_data(
@@ -97,14 +96,13 @@ def _load_pose_data(
         audio.append(curr_audio)
         lengths.append(len(curr_pose))
 
-    data_dict = {
+    return {
         "data": data,
         "face": face,
         "audio": audio,
         "lengths": lengths,
         "missing": missing,
     }
-    return data_dict
 
 
 def load_local_data(

@@ -115,8 +115,7 @@ class DenseFiLM(nn.Module):
     def forward(self, position):
         pos_encoding = self.block(position)
         pos_encoding = rearrange(pos_encoding, "b c -> b 1 c")
-        scale_shift = pos_encoding.chunk(2, dim=-1)
-        return scale_shift
+        return pos_encoding.chunk(2, dim=-1)
 
 
 def featurewise_affine(x, scale_shift):
@@ -298,8 +297,7 @@ class PositionalEncoding(nn.Module):
         :return: B x T x d_model tensor
         """
         x = x + self.pe[None, : x.shape[1], :]
-        x = self.dropout(x)
-        return x
+        return self.dropout(x)
 
 
 class TimestepEncoding(nn.Module):

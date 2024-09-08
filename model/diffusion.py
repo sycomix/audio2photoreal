@@ -75,8 +75,7 @@ class Audio2LipRegressionTransformer(torch.nn.Module):
         x = self.regression_model(x, cond)
         x = self.project_output(x)
 
-        verts = x.view(B, T, self.n_vertices, 3)
-        return verts
+        return x.view(B, T, self.n_vertices, 3)
 
 
 class FiLMTransformer(nn.Module):
@@ -199,28 +198,32 @@ class FiLMTransformer(nn.Module):
         self.final_layer.apply(init_weight)
 
     def _build_single_pose_conv(self, nfeats: int) -> nn.ModuleList:
-        post_pose_layers = torch.nn.ModuleList(
+        return torch.nn.ModuleList(
             [
-                torch.nn.Conv1d(nfeats, max(256, nfeats), kernel_size=3, dilation=1),
-                torch.nn.Conv1d(max(256, nfeats), nfeats, kernel_size=3, dilation=2),
+                torch.nn.Conv1d(
+                    nfeats, max(256, nfeats), kernel_size=3, dilation=1
+                ),
+                torch.nn.Conv1d(
+                    max(256, nfeats), nfeats, kernel_size=3, dilation=2
+                ),
                 torch.nn.Conv1d(nfeats, nfeats, kernel_size=3, dilation=3),
                 torch.nn.Conv1d(nfeats, nfeats, kernel_size=3, dilation=1),
                 torch.nn.Conv1d(nfeats, nfeats, kernel_size=3, dilation=2),
                 torch.nn.Conv1d(nfeats, nfeats, kernel_size=3, dilation=3),
             ]
         )
-        return post_pose_layers
 
     def _run_single_pose_conv(self, output: torch.Tensor) -> torch.Tensor:
         output = torch.nn.functional.pad(output, pad=[self.receptive_field - 1, 0])
-        for _, layer in enumerate(self.post_pose_layers):
+        for layer in self.post_pose_layers:
             y = torch.nn.functional.leaky_relu(layer(output), negative_slope=0.2)
             if self.split_type == "train":
                 y = torch.nn.functional.dropout(y, 0.2)
-            if output.shape[1] == y.shape[1]:
-                output = (output[:, :, -y.shape[-1] :] + y) / 2.0  # skip connection
-            else:
-                output = y
+            output = (
+                (output[:, :, -y.shape[-1] :] + y) / 2.0
+                if output.shape[1] == y.shape[1]
+                else y
+            )
         return output
 
     def setup_guide_models(self, args, latent_dim: int, key_feature_dim: int) -> None:
@@ -259,7 +262,7 @@ class FiLMTransformer(nn.Module):
         )
         for param in self.transformer.parameters():
             param.requires_grad = False
-        prGreen("loading TRANSFORMER checkpoint from {}".format(cp_path))
+        prGreen(f"loading TRANSFORMER checkpoint from {cp_path}")
         cp = torch.load(cp_path)
         missing_keys, unexpected_keys = self.transformer.load_state_dict(
             cp["model_state_dict"], strict=False

@@ -36,7 +36,7 @@ def filter_params(params, ignore_names):
         [
             (k, v)
             for k, v in params.items()
-            if not any([re.match(n, k) is not None for n in ignore_names])
+            if all(re.match(n, k) is None for n in ignore_names)
         ]
     )
 

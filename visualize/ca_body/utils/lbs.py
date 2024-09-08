@@ -74,10 +74,7 @@ class LinearBlendSkinning(nn.Module):
         joint_offset = torch.zeros((nr_joints, 3), dtype=torch.float32)
         for idx, bone in enumerate(model["Skeleton"]["Bones"]):
             self.joint_names.append(bone["Name"])
-            if bone["Parent"] > nr_joints:
-                joint_parents[idx] = -1
-            else:
-                joint_parents[idx] = bone["Parent"]
+            joint_parents[idx] = -1 if bone["Parent"] > nr_joints else bone["Parent"]
             joint_rotation[idx, :] = torch.FloatTensor(bone["PreRotation"])
             joint_offset[idx, :] = torch.FloatTensor(bone["TranslationOffset"])
 
@@ -236,9 +233,7 @@ class LinearBlendSkinning(nn.Module):
             .unsqueeze(4),
         )
         ws = self.skin_weights.unsqueeze(2).unsqueeze(3)
-        res = (vs * ws).sum(dim=2).squeeze(3)
-
-        return res
+        return (vs * ws).sum(dim=2).squeeze(3)
 
     def unpose(self, poses: th.Tensor, scales: th.Tensor, verts: th.Tensor):
         """
@@ -308,11 +303,11 @@ class LinearBlendSkinning(nn.Module):
             self.joint_rotation,
             self.joint_parents,
         )
-        if verts_unposed is None:
-            mesh = self.skinning(self.bind_state, self.mesh_vertices.unsqueeze(0), states)
-        else:
-            mesh = self.skinning(self.bind_state, verts_unposed, states)
-        return mesh
+        return (
+            self.skinning(self.bind_state, self.mesh_vertices.unsqueeze(0), states)
+            if verts_unposed is None
+            else self.skinning(self.bind_state, verts_unposed, states)
+        )
 
 
 def solve_skeleton_state(param: th.Tensor, joint_offset: th.Tensor, joint_rotation: th.Tensor, joint_parents: th.Tensor):
@@ -389,9 +384,7 @@ def states_to_matrix(bind_state: th.Tensor, target_states: th.Tensor, return_tra
         ),
         dim=3,
     )
-    if return_transform:
-        return mat, (tr, tt, ts)
-    return mat
+    return (mat, (tr, tt, ts)) if return_transform else mat
 
 
 def get_influence_map(
@@ -484,7 +477,7 @@ def load_momentum_cfg(model, lbs_config_txt_fh, nr_scaling_params=None):
                     continue
 
             # only parse passive limits for now
-            if type == "minmax_passive" or type == "minmax":
+            if type in ["minmax_passive", "minmax"]:
                 # match [<float> , <float>] <optional weight>
                 rp = re.search(
                     "\\[\\s*([-+]?[0-9]*\\.?[0-9]+)\\s*,\\s*([-+]?[0-9]*\\.?[0-9]+)\\s*\\](\\s*[-+]?[0-9]*\\.?[0-9]+)?",
@@ -498,7 +491,7 @@ def load_momentum_cfg(model, lbs_config_txt_fh, nr_scaling_params=None):
                 minVal = float(rp.groups()[0])
                 maxVal = float(rp.groups()[1])
                 weightVal = 1.0
-                if len(rp.groups()) == 3 and not rp.groups()[2] is None:
+                if len(rp.groups()) == 3 and rp.groups()[2] is not None:
                     weightVal = float(rp.groups()[2])
 
                 # result.limits.append([jointIndex * 7 + channelIndex, minVal, maxVal])
@@ -733,7 +726,7 @@ def compute_pose_regions_legacy(lbs_fn) -> np.ndarray:
     j_to_p = get_influence_map(lbs_fn.param_transform.transform, n_pos)
 
     # get all the joints
-    p_to_j = [[] for i in range(n_pos)]
+    p_to_j = [[] for _ in range(n_pos)]
     for j, pidx in enumerate(j_to_p):
         for p in pidx:
             if j not in p_to_j[p]:
@@ -758,8 +751,9 @@ def compute_pose_mask_uv(lbs_fn, geo_fn, uv_size, ksize=25):
     )
     pose_regions_uv = geo_fn.to_uv(pose_regions)
     pose_regions_uv = F.max_pool2d(pose_regions_uv, ksize, 1, padding=ksize // 2)
-    pose_cond_mask = (F.interpolate(pose_regions_uv, size=(uv_size, uv_size)) > 0.1).to(th.int32)
-    return pose_cond_mask
+    return (F.interpolate(pose_regions_uv, size=(uv_size, uv_size)) > 0.1).to(
+        th.int32
+    )
 
 
 def parent_chain(joint_parents, idx, depth):

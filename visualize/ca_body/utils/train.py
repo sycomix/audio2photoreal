@@ -102,14 +102,14 @@ def filter_params(params, ignore_names):
         [
             (k, v)
             for k, v in params.items()
-            if not any([re.match(n, k) is not None for n in ignore_names])
+            if all(re.match(n, k) is None for n in ignore_names)
         ]
     )
 
 
 def save_file_summaries(path: str, summaries: Dict[str, Tuple[str, Any]]):
     """Saving regular summaries for monitoring purposes."""
-    for name, (value, ext) in summaries.items():
+    for value, ext in summaries.values():
         #save(f'{path}/{name}.{ext}', value)
         raise NotImplementedError()
 
@@ -133,10 +133,8 @@ def load_checkpoint(
         if iteration is None:
             # lookup latest iteration
             iteration = max(
-                [
-                    int(os.path.splitext(os.path.basename(p))[0])
-                    for p in glob.glob(os.path.join(ckpt_path, "*.pt"))
-                ]
+                int(os.path.splitext(os.path.basename(p))[0])
+                for p in glob.glob(os.path.join(ckpt_path, "*.pt"))
             )
         ckpt_path = os.path.join(ckpt_path, f"{iteration:06d}.pt")
     logger.info(f"loading checkpoint {ckpt_path}")

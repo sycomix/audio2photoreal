@@ -179,15 +179,11 @@ class AudioTcn(th.nn.Module):
 
         # process signal with TCN
         x = th.nn.functional.pad(x, pad=[self.receptive_field - 1, 0])
-        for layer_idx, layer in enumerate(self.layers):
+        for layer in self.layers:
             y = th.nn.functional.leaky_relu(layer(x), negative_slope=0.2)
             if self.training:
                 y = th.nn.functional.dropout(y, 0.2)
-            if x.shape[1] == y.shape[1]:
-                x = (x[:, :, -y.shape[-1] :] + y) / 2.0  # skip connection
-            else:
-                x = y
-
+            x = (x[:, :, -y.shape[-1] :] + y) / 2.0 if x.shape[1] == y.shape[1] else y
         x = self.final(x)
         x = x.permute(0, 2, 1).contiguous()
 

@@ -224,7 +224,7 @@ def _reset_sample_args(args) -> None:
     # reformat the output directory
     args.output_dir = os.path.join(
         os.path.dirname(args.model_path),
-        "samples_{}_{}_seed{}_{}".format(name, niter, args.seed, resume_trans_name),
+        f"samples_{name}_{niter}_seed{args.seed}_{resume_trans_name}",
     )
     assert (
         args.num_samples <= args.batch_size
@@ -240,13 +240,12 @@ def _setup_dataset(args) -> DataLoader:
         audio_per_frame=1600,
         flip_person=args.flip_person,
     )
-    test_data = get_dataset_loader(
+    return get_dataset_loader(
         args=args,
         data_dict=data_dict,
         split="test",
         chunk=True,
     )
-    return test_data
 
 
 def _setup_model(

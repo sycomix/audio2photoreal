@@ -87,9 +87,7 @@ class TrainLoop:
         self.ddp_model = self.model
 
     def _load_and_sync_parameters(self):
-        resume_checkpoint = find_resume_checkpoint() or self.resume_checkpoint
-
-        if resume_checkpoint:
+        if resume_checkpoint := find_resume_checkpoint() or self.resume_checkpoint:
             self.resume_step = parse_resume_step_from_filename(resume_checkpoint)
             logger.log(f"loading model from checkpoint: {resume_checkpoint}...")
             self.model.load_state_dict(
@@ -124,11 +122,10 @@ class TrainLoop:
                     self.writer.add_scalar(f"./Train/{k}", v, self.step)
                 if k in ["step", "samples"] or "_q" in k:
                     continue
-                else:
-                    self.train_platform.report_scalar(
-                        name=k, value=v, iteration=self.step, group_name="Loss"
-                    )
-                    self.writer.add_scalar(f"./Train/{k}", v, self.step)
+                self.train_platform.report_scalar(
+                    name=k, value=v, iteration=self.step, group_name="Loss"
+                )
+                self.writer.add_scalar(f"./Train/{k}", v, self.step)
 
     def run_loop(self):
         for _ in range(self.num_epochs):
@@ -238,7 +235,7 @@ class TrainLoop:
             for e in clip_weights:
                 del state_dict[e]
 
-            logger.log(f"saving model...")
+            logger.log("saving model...")
             filename = self.ckpt_file_name()
             with bf.BlobFile(bf.join(self.save_dir, filename), "wb") as f:
                 torch.save(state_dict, f)

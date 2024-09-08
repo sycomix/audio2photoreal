@@ -25,7 +25,7 @@ def setup_tokenizer(resume_pth: str) -> "TemporalVertexCodec":
         categories=trans_args["code_dim"],
         residual_depth=trans_args["depth"],
     )
-    print("loading checkpoint from {}".format(resume_pth))
+    print(f"loading checkpoint from {resume_pth}")
     ckpt = torch.load(resume_pth, map_location="cpu")
     tokenizer.load_state_dict(ckpt["net"], strict=True)
     for p in tokenizer.parameters():
@@ -177,15 +177,13 @@ class EuclideanCodebook(nn.Module):
             - 2 * x @ embed
             + embed.pow(2).sum(0, keepdim=True)
         )
-        embed_ind = dist.max(dim=-1).indices
-        return embed_ind
+        return dist.max(dim=-1).indices
 
     def postprocess_emb(self, embed_ind, shape):
         return embed_ind.view(*shape[:-1])
 
     def dequantize(self, embed_ind):
-        quantize = F.embedding(embed_ind, self.embed)
-        return quantize
+        return F.embedding(embed_ind, self.embed)
 
     def encode(self, x):
         shape = x.shape
@@ -195,8 +193,7 @@ class EuclideanCodebook(nn.Module):
         return embed_ind
 
     def decode(self, embed_ind):
-        quantize = self.dequantize(embed_ind)
-        return quantize
+        return self.dequantize(embed_ind)
 
     def forward(self, x):
         shape, dtype = x.shape, x.dtype
@@ -287,8 +284,7 @@ class VectorQuantization(nn.Module):
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         x = self.project_in(x)
-        embed_in = self._codebook.encode(x)
-        return embed_in
+        return self._codebook.encode(x)
 
     def decode(self, embed_ind: torch.Tensor) -> torch.Tensor:
         quantize = self._codebook.decode(embed_ind)
@@ -375,8 +371,7 @@ class ResidualVectorQuantization(nn.Module):
             quantized = layer.decode(indices)
             residual = residual - quantized
             all_indices.append(indices)
-        out_indices = torch.stack(all_indices, dim=-1)
-        return out_indices
+        return torch.stack(all_indices, dim=-1)
 
     def decode(self, q_indices: torch.Tensor) -> torch.Tensor:
         """
@@ -502,8 +497,7 @@ class TemporalVertexCodec(nn.Module):
         :return: B x T x categories x residual_depth LongTensor containing quantized encodings
         """
         enc = self.encoder(verts)
-        q = self.quantizer.encode(enc)
-        return q
+        return self.quantizer.encode(enc)
 
     def decode(self, q):
         """
@@ -517,8 +511,7 @@ class TemporalVertexCodec(nn.Module):
         enc = self.quantizer.decode(q)
         if reformat:
             enc = enc.reshape((B, T, -1))
-        verts = self.decoder(enc)
-        return verts
+        return self.decoder(enc)
 
     @torch.no_grad()
     def compute_perplexity(self, code_idx):
@@ -530,8 +523,7 @@ class TemporalVertexCodec(nn.Module):
 
         code_count = code_onehot.sum(dim=-1)  # categories
         prob = code_count / torch.sum(code_count)
-        perplexity = torch.exp(-torch.sum(prob * torch.log(prob + 1e-7)))
-        return perplexity
+        return torch.exp(-torch.sum(prob * torch.log(prob + 1e-7)))
 
     def forward(self, verts, mask=None):
         """

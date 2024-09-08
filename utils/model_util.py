@@ -31,10 +31,8 @@ def load_model(model, state_dict):
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     assert len(unexpected_keys) == 0, unexpected_keys
     assert all(
-        [
-            k.startswith("transformer.") or k.startswith("tokenizer.")
-            for k in missing_keys
-        ]
+        k.startswith("transformer.") or k.startswith("tokenizer.")
+        for k in missing_keys
     ), missing_keys
 
 
@@ -57,7 +55,7 @@ def get_model_args(args, split_type):
     if not hasattr(args, "num_audio_layers"):
         args.num_audio_layers = 3  # backwards compat
 
-    model_args = {
+    return {
         "args": args,
         "nfeats": nfeat,
         "latent_dim": lfeat,
@@ -73,7 +71,6 @@ def get_model_args(args, split_type):
         "num_audio_layers": args.num_audio_layers,
         "device": args.device,
     }
-    return model_args
 
 
 def create_gaussian_diffusion(args):

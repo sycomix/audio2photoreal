@@ -47,10 +47,7 @@ def load_module(
     """
     try:
         module = importlib.import_module(f"visualize.{module_name}")
-        if class_name:
-            return getattr(module, class_name)
-        else:
-            return module
+        return getattr(module, class_name) if class_name else module
     except ModuleNotFoundError as e:
         if silent:
             return None

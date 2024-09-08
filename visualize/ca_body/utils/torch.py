@@ -122,11 +122,7 @@ class ParamHolder(th.nn.Module):
         return super().load_state_dict(sd, strict=strict, **kwargs)
 
     def to_idx(self, *args: Any) -> th.Tensor:
-        if len(args) == 1:
-            keys = args[0]
-        else:
-            keys = zip(*args)
-
+        keys = args[0] if len(args) == 1 else zip(*args)
         return th.tensor(
             [self.key_list.index(k) for k in keys],
             dtype=th.long,
@@ -180,33 +176,32 @@ def to_device(
     """
     device = th.device(device)
 
-    pr = print if verbose else lambda *args, **kwargs: None
-
     if isinstance(things, th.Tensor) and things.device != device:
-        if cache is not None:
-            assert key is not None
-            batch_size = things.shape[0]
-            if key in cache:
-                assert things.shape[1:] == cache[key].shape[1:]
-                if batch_size > cache[key].shape[0]:
-                    pr("Resized:", key, "from", cache[key].shape[0], "to", batch_size)
-                    cache[key].resize_as_(things)
-            else:
-                buf_shape = list(things.shape)
-                if max_bs is not None:
-                    assert max_bs >= batch_size
-                    buf_shape[0] = max_bs
-                cache[key] = th.zeros(*buf_shape, dtype=things.dtype, device=device)
-                pr("Allocated:", key, buf_shape)
-            cache[key][:batch_size].copy_(things, non_blocking=non_blocking)
-
-            return cache[key][:batch_size]
-        else:
+        if cache is None:
             return things.to(device, non_blocking=non_blocking)
+        assert key is not None
+        batch_size = things.shape[0]
+        pr = print if verbose else lambda *args, **kwargs: None
+
+        if key in cache:
+            assert things.shape[1:] == cache[key].shape[1:]
+            if batch_size > cache[key].shape[0]:
+                pr("Resized:", key, "from", cache[key].shape[0], "to", batch_size)
+                cache[key].resize_as_(things)
+        else:
+            buf_shape = list(things.shape)
+            if max_bs is not None:
+                assert max_bs >= batch_size
+                buf_shape[0] = max_bs
+            cache[key] = th.zeros(*buf_shape, dtype=things.dtype, device=device)
+            pr("Allocated:", key, buf_shape)
+        cache[key][:batch_size].copy_(things, non_blocking=non_blocking)
+
+        return cache[key][:batch_size]
     elif isinstance(things, th.nn.Module):
         return things.to(device, non_blocking=non_blocking)
     elif isinstance(things, dict):
-        key = key + "." if key is not None else ""
+        key = f"{key}." if key is not None else ""
         return {
             k: to_device(v, device, cache, key + k, verbose, max_bs, non_blocking)
             for k, v in things.items()
@@ -214,7 +209,9 @@ def to_device(
     elif isinstance(things, Sequence) and not isinstance(things, str):
         key = key if key is not None else ""
         out = [
-            to_device(v, device, cache, key + f"_{i}", verbose, max_bs, non_blocking)
+            to_device(
+                v, device, cache, f"{key}_{i}", verbose, max_bs, non_blocking
+            )
             for i, v in enumerate(things)
         ]
         if isinstance(things, tuple):

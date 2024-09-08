@@ -32,14 +32,13 @@ def linear2srgb(img: np.ndarray, gamma: float = 2.4) -> np.ndarray:
 def linear2srgb(
     img: Union[th.Tensor, np.ndarray], gamma: float = 2.4
 ) -> Union[th.Tensor, np.ndarray]:
+    # Note: The following combines the linear and exponential parts of the sRGB curve without
+    # causing NaN values or gradients for negative inputs (where the curve would be linear).
+    linear_part = img * 12.92  # linear part of sRGB curve
     if isinstance(img, th.Tensor):
-        # Note: The following combines the linear and exponential parts of the sRGB curve without
-        # causing NaN values or gradients for negative inputs (where the curve would be linear).
-        linear_part = img * 12.92  # linear part of sRGB curve
         exp_part = 1.055 * th.pow(th.clamp(img, min=0.0031308), 1 / gamma) - 0.055
         return th.where(img <= 0.0031308, linear_part, exp_part)
     else:
-        linear_part = img * 12.92
         exp_part = 1.055 * (np.maximum(img, 0.0031308) ** (1 / gamma)) - 0.055
         return np.where(img <= 0.0031308, linear_part, exp_part)
 
@@ -275,13 +274,7 @@ def mapped2srgb(
     The  dimension index  of  the color channel is specified with `dim`
     (default is -1 i.e. last dimension.)
     """
-    # Note: The redundant if-statement below is due to a Pyre bug.
-    # Currently Pyre fails to handle arguments into overloaded functions that are typed
-    # as a union of the overloaded method parameter types.
-    if isinstance(img, th.Tensor):
-        return linear2srgb(mapped2linear(img, dim, ccm, dc_offset, gamma), gamma=2.4)
-    else:
-        return linear2srgb(mapped2linear(img, dim, ccm, dc_offset, gamma), gamma=2.4)
+    return linear2srgb(mapped2linear(img, dim, ccm, dc_offset, gamma), gamma=2.4)
 
 
 @overload
@@ -350,8 +343,7 @@ class LaplacianTexture(th.nn.Module):
 
     def init_from_tex(self, tex: th.Tensor) -> None:
         ds = [tex]
-        for level in range(1, self.n_levels):
-            ds.append(thf.avg_pool2d(tex, 2**level))
+        ds.extend(thf.avg_pool2d(tex, 2**level) for level in range(1, self.n_levels))
         ds = ds[::-1]
 
         self.pyr_texs[0].data[:] = ds[0].data
@@ -395,17 +387,10 @@ def dilate(x: th.Tensor, ks: int) -> th.Tensor:
 
 
 def erode(x: th.Tensor, ks: int) -> th.Tensor:
-    if x.dtype is th.bool:
-        flip_x = ~x
-    else:
-        flip_x = 1 - x
-
+    flip_x = ~x if x.dtype is th.bool else 1 - x
     flip_out = dilate(flip_x, ks)
 
-    if flip_out.dtype is th.bool:
-        return ~flip_out
-    else:
-        return 1 - flip_out
+    return ~flip_out if flip_out.dtype is th.bool else 1 - flip_out
 
 
 def smoothstep(e0: np.ndarray, e1: np.ndarray, x: np.ndarray) -> np.ndarray:
@@ -609,15 +594,15 @@ def kpts2delta(kpts: th.Tensor, size: Sequence[int]) -> th.Tensor:
         th.arange(w, dtype=kpts.dtype, device=kpts.device),
         indexing="xy",
     )
-    delta = kpts.unflatten(-1, (1, 1, 2)) - th.stack(grid, dim=-1).unflatten(0, (1, 1, h))
-    return delta
+    return kpts.unflatten(-1, (1, 1, 2)) - th.stack(grid, dim=-1).unflatten(
+        0, (1, 1, h)
+    )
 
 
 def kpts2heatmap(kpts: th.Tensor, size: Sequence[int], sigma: int = 7) -> th.Tensor:
     # kpts: B x N x 2
     dist = kpts2delta(kpts, size).square().sum(-1)
-    heatmap = th.exp(-dist / (2 * sigma**2))
-    return heatmap
+    return th.exp(-dist / (2 * sigma**2))
 
 
 def make_image_grid(
@@ -857,7 +842,9 @@ def resize_to_match(
             tensor = thf.interpolate(
                 tensor,
                 scale_factor=ratio,
-                align_corners=False if mode in ["bilinear", "bicubic"] else None,
+                align_corners=False
+                if mode in {"bilinear", "bicubic"}
+                else None,
                 recompute_scale_factor=True,
                 mode=mode,
             )
@@ -884,8 +871,7 @@ def draw_text(
         else:
             cv2.putText(image, text, loc, font, scale, color, thickness)
         canvas_new[i] = image
-    canvas_tensor = th.ByteTensor(canvas_new.transpose(0, 3, 1, 2)).to(device)
-    return canvas_tensor
+    return th.ByteTensor(canvas_new.transpose(0, 3, 1, 2)).to(device)
 
 
 # TODO(T153410551): Deprecate this function

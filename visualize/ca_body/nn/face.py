@@ -29,7 +29,7 @@ class FaceDecoderFrontal(nn.Module):
         self.n_vert_out = n_vert_out
         self.tex_roi = tex_roi
         self.tex_roi_shp: Tuple[int, int] = tuple(
-            [int(i) for i in np.diff(np.array(tex_roi), axis=0).squeeze()]
+            int(i) for i in np.diff(np.array(tex_roi), axis=0).squeeze()
         )
         self.tex_out_shp = tex_out_shp
 

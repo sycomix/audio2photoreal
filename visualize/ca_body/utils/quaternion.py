@@ -334,7 +334,7 @@ class Quaternion:
         sy = rs[:, 1]
         sz = rs[:, 2]
 
-        result = th.stack(
+        return th.stack(
             (
                 cy * cz,
                 -cx * sz + sx * sy * cz,
@@ -348,7 +348,6 @@ class Quaternion:
             ),
             dim=1,
         ).view(-1, 3, 3)
-        return result
 
     @staticmethod
     def batchQuatFromMatrix(m):

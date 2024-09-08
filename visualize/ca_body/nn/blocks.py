@@ -52,10 +52,9 @@ def WeightNorm(x, dim=0):
 # pyre-ignore
 def np_warp_bias(uv_size):
     xgrid, ygrid = np.meshgrid(np.linspace(-1.0, 1.0, uv_size), np.linspace(-1.0, 1.0, uv_size))
-    grid = np.concatenate((xgrid[None, :, :], ygrid[None, :, :]), axis=0)[None, ...].astype(
-        np.float32
-    )
-    return grid
+    return np.concatenate((xgrid[None, :, :], ygrid[None, :, :]), axis=0)[
+        None, ...
+    ].astype(np.float32)
 
 
 class Conv2dBias(nn.Conv2d):

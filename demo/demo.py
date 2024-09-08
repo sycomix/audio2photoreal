@@ -36,7 +36,7 @@ class GradioModel:
         stats["pose_std"] = stats["pose_std"].reshape(-1)
         self.stats = stats
         # set up renderer
-        config_base = f"./checkpoints/ca_body/data/PXB184"
+        config_base = "./checkpoints/ca_body/data/PXB184"
         self.body_renderer = BodyRenderer(
             config_base=config_base,
             render_rgb=True,
@@ -84,8 +84,7 @@ class GradioModel:
                 top_p=top_p,
             )
         tokens = tokens.reshape((B, -1, self.pose_model.tokenizer.residual_depth))
-        pred = self.pose_model.tokenizer.decode(tokens).detach()
-        return pred
+        return self.pose_model.tokenizer.decode(tokens).detach()
 
     def _run_single_diffusion(
         self,
@@ -127,7 +126,6 @@ class GradioModel:
             model = self.face_model
             diffusion = self.face_diffusion
 
-        all_motions = []
         model_kwargs["y"]["scale"] = torch.ones(num_repetitions) * guidance_param
         model_kwargs["y"] = {
             key: val.to(self.device) if torch.is_tensor(val) else val
@@ -140,15 +138,12 @@ class GradioModel:
                 .bool()
             )
             model_kwargs["y"]["keyframes"] = self._replace_keyframes(
-                model_kwargs,
-                num_repetitions,
-                int(curr_seq_length / 30),
-                top_p=top_p,
+                model_kwargs, num_repetitions, curr_seq_length // 30, top_p=top_p
             )
         sample = self._run_single_diffusion(
             model_kwargs, diffusion, model, curr_seq_length, num_repetitions
         )
-        all_motions.append(sample.cpu().numpy())
+        all_motions = [sample.cpu().numpy()]
         print(f"created {len(all_motions) * num_repetitions} samples")
         return np.concatenate(all_motions, axis=0)
 
@@ -173,7 +168,7 @@ def generate_results(audio: np.ndarray, num_repetitions: int, top_p: float):
         )
     cutoff = int(len(y) / (sr * 4))
     y = y[: cutoff * sr * 4]
-    curr_seq_length = int(len(y) / sr) * 30
+    curr_seq_length = len(y) // sr * 30
     # create model_kwargs
     model_kwargs = {"y": {}}
     dual_audio = np.random.normal(0, 0.001, (1, len(y), 2))
@@ -186,7 +181,10 @@ def generate_results(audio: np.ndarray, num_repetitions: int, top_p: float):
     )
     face_results = (
         gradio_model.generate_sequences(
-            model_kwargs, "face", curr_seq_length, num_repetitions=int(num_repetitions)
+            model_kwargs,
+            "face",
+            curr_seq_length,
+            num_repetitions=num_repetitions,
         )
         .squeeze(2)
         .transpose(0, 2, 1)
@@ -199,7 +197,7 @@ def generate_results(audio: np.ndarray, num_repetitions: int, top_p: float):
             model_kwargs,
             "pose",
             curr_seq_length,
-            num_repetitions=int(num_repetitions),
+            num_repetitions=num_repetitions,
             guidance_param=2.0,
             top_p=top_p,
         )

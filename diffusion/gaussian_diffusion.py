@@ -103,7 +103,7 @@ class LossType(enum.Enum):
     RESCALED_KL = enum.auto()  # like KL, but rescale to estimate the full VLB
 
     def is_vb(self):
-        return self == LossType.KL or self == LossType.RESCALED_KL
+        return self in [LossType.KL, LossType.RESCALED_KL]
 
 
 class GaussianDiffusion:
@@ -192,8 +192,7 @@ class GaussianDiffusion:
         loss = sum_flat(loss * mask.float())
         n_entries = a.shape[1] * a.shape[2]
         non_zero_elements = sum_flat(mask) * n_entries
-        mse_loss_val = loss / non_zero_elements
-        return mse_loss_val
+        return loss / non_zero_elements
 
     def q_mean_variance(self, x_start, t):
         """
@@ -305,9 +304,7 @@ class GaussianDiffusion:
         def process_xstart(x):
             if denoised_fn is not None:
                 x = denoised_fn(x)
-            if clip_denoised:
-                return x.clamp(-1, 1)
-            return x
+            return x.clamp(-1, 1) if clip_denoised else x
 
         pred_xstart = process_xstart(model_output)
         pred_xstart = pred_xstart.permute(0, 2, 1).unsqueeze(2)
@@ -365,10 +362,9 @@ class GaussianDiffusion:
         This uses the conditioning strategy from Sohl-Dickstein et al. (2015).
         """
         gradient = cond_fn(x, self._scale_timesteps(t), **model_kwargs)
-        new_mean = (
+        return (
             p_mean_var["mean"].float() + p_mean_var["variance"] * gradient.float()
         )
-        return new_mean
 
     def condition_mean_with_grad(self, cond_fn, p_mean_var, x, t, model_kwargs=None):
         """
@@ -380,10 +376,9 @@ class GaussianDiffusion:
         This uses the conditioning strategy from Sohl-Dickstein et al. (2015).
         """
         gradient = cond_fn(x, t, p_mean_var, **model_kwargs)
-        new_mean = (
+        return (
             p_mean_var["mean"].float() + p_mean_var["variance"] * gradient.float()
         )
-        return new_mean
 
     def condition_score(self, cond_fn, p_mean_var, x, t, model_kwargs=None):
         """
@@ -585,9 +580,7 @@ class GaussianDiffusion:
             if dump_steps is not None and i in dump_steps:
                 dump.append(deepcopy(sample["sample"]))
             final = sample
-        if dump_steps is not None:
-            return dump
-        return final["sample"]
+        return dump if dump_steps is not None else final["sample"]
 
     def p_sample_loop_progressive(
         self,
@@ -617,11 +610,7 @@ class GaussianDiffusion:
         if device is None:
             device = next(model.parameters()).device
         assert isinstance(shape, (tuple, list))
-        if noise is not None:
-            img = noise
-        else:
-            img = th.randn(*shape, device=device)
-
+        img = noise if noise is not None else th.randn(*shape, device=device)
         if skip_timesteps and init_image is None:
             init_image = th.zeros_like(img)
 
@@ -887,11 +876,7 @@ class GaussianDiffusion:
         if device is None:
             device = next(model.parameters()).device
         assert isinstance(shape, (tuple, list))
-        if noise is not None:
-            img = noise
-        else:
-            img = th.randn(*shape, device=device)
-
+        img = noise if noise is not None else th.randn(*shape, device=device)
         if skip_timesteps and init_image is None:
             init_image = th.zeros_like(img)
 
@@ -1109,11 +1094,7 @@ class GaussianDiffusion:
         if device is None:
             device = next(model.parameters()).device
         assert isinstance(shape, (tuple, list))
-        if noise is not None:
-            img = noise
-        else:
-            img = th.randn(*shape, device=device)
-
+        img = noise if noise is not None else th.randn(*shape, device=device)
         if skip_timesteps and init_image is None:
             init_image = th.zeros_like(img)
 
@@ -1213,8 +1194,6 @@ class GaussianDiffusion:
         x_t = self.q_sample(
             x_start, t, noise=noise
         )  # use the formula to diffuse the starting tensor by t steps
-        terms = {}
-
         # set random dropout for conditioning in training
         model_kwargs["cond_drop_prob"] = 0.2
         model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
@@ -1232,7 +1211,7 @@ class GaussianDiffusion:
         missing_mask = model_kwargs["y"]["missing"][..., 0]
         missing_mask = missing_mask.unsqueeze(1).unsqueeze(1)
         missing_mask = mask * missing_mask
-        terms["rot_mse"] = self.masked_l2(target, model_output, missing_mask)
+        terms = {"rot_mse": self.masked_l2(target, model_output, missing_mask)}
         if self.lambda_vel > 0.0:
             target_vel = target[..., 1:] - target[..., :-1]
             model_output_vel = model_output[..., 1:] - model_output[..., :-1]

@@ -29,9 +29,7 @@ class Social(data.Dataset):
             data_dict["data"] = data_dict["face"]
         elif args.data_format == "pose":
             prGreen("[dataset.py] training pose only model")
-            missing = []
-            for d in data_dict["data"]:
-                missing.append(np.ones_like(d))
+            missing = [np.ones_like(d) for d in data_dict["data"]]
             data_dict["missing"] = missing
 
         # set up variables for dataloader
@@ -95,7 +93,7 @@ class Social(data.Dataset):
         self.missing = np.take(data_dict["missing"], idx, axis=0)
         self.audio = np.take(data_dict["audio"], idx, axis=0)
         self.lengths = np.take(data_dict["lengths"], idx, axis=0)
-        self.total_len = sum([len(d) for d in self.data])
+        self.total_len = sum(len(d) for d in self.data)
 
     def _load_std(self) -> None:
         stats = torch.load(os.path.join(self.data_root, "data_stats.pth"))
@@ -167,8 +165,7 @@ class Social(data.Dataset):
         while item > cumulative_len:
             cumulative_len += len(self.data[seq_idx])
             seq_idx += 1
-        item = seq_idx - 1
-        return item
+        return seq_idx - 1
 
     def _get_random_subsection(
         self, data_dict: Dict[str, Iterable]
@@ -179,7 +176,7 @@ class Social(data.Dataset):
             if self.add_padding:
                 length = (
                     np.random.randint(self.min_seq_length, self.max_seq_length)
-                    if not self.split == "test"
+                    if self.split != "test"
                     else self.max_seq_length
                 )
             else:
@@ -222,7 +219,7 @@ class Social(data.Dataset):
 
     def __getitem__(self, item: int) -> Dict[str, np.ndarray]:
         # figure out which sequence to randomly sample from
-        if not self.split == "test":
+        if self.split != "test":
             item = self._get_idx(item)
         motion = self.data[item]
         audio = self.audio[item]
@@ -230,10 +227,10 @@ class Social(data.Dataset):
         missing = self.missing[item]
         a_length = len(audio)
         # Z Normalization
-        if self.data_format == "pose":
-            motion = (motion - self.mean) / self.std
-        elif self.data_format == "face":
+        if self.data_format == "face":
             motion = (motion - self.face_mean) / self.face_std
+        elif self.data_format == "pose":
+            motion = (motion - self.mean) / self.std
         audio = (audio - self.audio_mean) / self.audio_std
         keyframes = motion[:: self.step]
         k_length = len(keyframes)
@@ -246,7 +243,7 @@ class Social(data.Dataset):
             "k_length": k_length,
             "missing": missing,
         }
-        if not self.split == "test" and not self.chunk:
+        if self.split != "test" and not self.chunk:
             data_dict = self._get_random_subsection(data_dict)
         if self.data_format == "face":
             data_dict["motion"] *= data_dict["missing"]

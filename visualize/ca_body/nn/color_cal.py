@@ -69,7 +69,7 @@ class CalV3(CalBase):
         self.cameras = cameras
 
         self.conv = th.nn.ModuleList(
-            [th.nn.Conv2d(3, 3, 1, 1, 0, groups=3) for i in range(len(cameras))]
+            [th.nn.Conv2d(3, 3, 1, 1, 0, groups=3) for _ in range(len(cameras))]
         )
 
         for i in range(len(cameras)):
@@ -156,14 +156,13 @@ class CalV5(CalBase):
             texs[cam] = tex.permute(1, 2, 0)
 
         stats = {}
-        for cam in texs.keys():
-            t = texs[cam]
+        for cam, t in texs.items():
             mask = (t > 0).all(dim=2)
             t = t * ds.tex_std + tex_mean
             stats[cam] = (t[mask].mean(dim=0), t[mask].std(dim=0))
 
         normstats = {}
-        for cam in texs.keys():
+        for cam in texs:
             mean, std = stats[cam]
             imean, istd = stats[self.identity_camera]
             scale = istd / std
@@ -200,7 +199,7 @@ class CalV5(CalBase):
             destination=destination, prefix=prefix, keep_vars=keep_vars
         )
         if saving:
-            sd[prefix + "holder.key_list"] = self.holder.key_list
+            sd[f"{prefix}holder.key_list"] = self.holder.key_list
         return sd
 
     def forward(self, image: th.Tensor, cam_idxs: th.Tensor) -> th.Tensor:
@@ -301,7 +300,7 @@ class CalV6(CalBase):
             destination=destination, prefix=prefix, keep_vars=keep_vars
         )
         if saving:
-            sd[prefix + "holder.key_list"] = self.holder.key_list
+            sd[f"{prefix}holder.key_list"] = self.holder.key_list
         return sd
 
     def forward(self, image: th.Tensor, cam_idxs: th.Tensor) -> th.Tensor:
